@@ -51,6 +51,7 @@
     </aside>
     
     <div class="overlay" id="overlay"></div>
+
     <header class="modern-header">
         <div class="header-container">
             <div class="header-left">
@@ -108,14 +109,12 @@
                         <div class="restaurant-info">
                             <h3 class="restaurant-name">{{ restaurant.name }}</h3>
 
-                            {# prédio / localização no campus, se tiver preenchido #}
                             {% if restaurant.building %}
                                 <p class="restaurant-location">
                                     {{ restaurant.building }}
                                 </p>
                             {% endif %}
 
-                            {# tipo de cozinha (usa as choices do modelo) #}
                             {% if restaurant.get_cuisine_type_display %}
                                 <p class="restaurant-cuisine">
                                     {{ restaurant.get_cuisine_type_display }}
@@ -134,6 +133,20 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // ====== DADOS DOS RESTAURANTES VINDOS DO DJANGO ======
+        const restaurantsData = [
+            {% for restaurant in restaurants %}
+            {
+                id: {{ restaurant.id }},
+                name: "{{ restaurant.name|escapejs }}",
+                building: "{{ restaurant.building|default_if_none:''|escapejs }}",
+                cuisine: "{{ restaurant.get_cuisine_type_display|default_if_none:''|escapejs }}",
+                latitude: {{ restaurant.latitude|default:"null" }},
+                longitude: {{ restaurant.longitude|default:"null" }}
+            }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+
         const pucRio = [-22.9794, -43.2329];
         
         const map = L.map('map', {
@@ -154,14 +167,45 @@
 
         const customIcon = L.divIcon({
             className: 'custom-marker',
-            html: '<div style="background-color: #9CCC65; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><div style="width: 10px; height: 10px; background-color: white; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg);"></div></div>',
+            html: '<div style="background-color: #9CCC65; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); position: relative;"><div style="width: 10px; height: 10px; background-color: white; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg);"></div></div>',
             iconSize: [30, 30],
             iconAnchor: [15, 30]
         });
 
-        L.marker(pucRio, {icon: customIcon}).addTo(map)
+        // Marker central da PUC (se quiser manter)
+        L.marker(pucRio, {icon: customIcon})
+            .addTo(map)
             .bindPopup('PUC-Rio');
 
+        // ====== MARCADORES PARA TODOS OS RESTAURANTES COM LAT/LONG ======
+        const bounds = [];
+        restaurantsData.forEach((restaurant) => {
+            if (restaurant.latitude != null && restaurant.longitude != null) {
+                const latLng = [restaurant.latitude, restaurant.longitude];
+
+                let popupHtml = `<strong>${restaurant.name}</strong>`;
+                if (restaurant.building) {
+                    popupHtml += `<br><small>${restaurant.building}</small>`;
+                }
+                if (restaurant.cuisine) {
+                    popupHtml += `<br><small>${restaurant.cuisine}</small>`;
+                }
+
+                const marker = L.marker(latLng, {icon: customIcon})
+                    .addTo(map)
+                    .bindPopup(popupHtml);
+
+                bounds.push(latLng);
+            }
+        });
+
+        // Ajusta o zoom para caber todos os restaurantes (se houver)
+        if (bounds.length > 0) {
+            const latLngBounds = L.latLngBounds(bounds);
+            map.fitBounds(latLngBounds, { padding: [20, 20] });
+        }
+
+        // ====== UI LATERAL E MENUS ======
         const menuToggle = document.getElementById('menuToggle');
         const menuSidebar = document.getElementById('menuSidebar');
         const overlay = document.getElementById('overlay');
